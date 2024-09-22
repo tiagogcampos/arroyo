@@ -5,7 +5,7 @@ use crate::{CheckpointCounter, ControlOutcome, SourceFinishType};
 use anyhow::anyhow;
 use arrow::array::RecordBatch;
 use arrow::datatypes::DataType;
-use arroyo_datastream::logical::DylibUdfConfig;
+use arroyo_datastream::logical::{DylibUdfConfig, PythonUdfConfig};
 use arroyo_metrics::TaskCounters;
 use arroyo_rpc::grpc::rpc::{TableConfig, TaskCheckpointEventType};
 use arroyo_rpc::{ControlMessage, ControlResp};
@@ -13,6 +13,7 @@ use arroyo_storage::StorageProvider;
 use arroyo_types::{ArrowMessage, CheckpointBarrier, SignalMessage, Watermark};
 use arroyo_udf_host::parse::inner_type;
 use arroyo_udf_host::{ContainerOrLocal, LocalUdf, SyncUdfDylib, UdfDylib, UdfInterface};
+use arroyo_udf_python::PythonUDF;
 use async_trait::async_trait;
 use datafusion::common::{DataFusionError, Result as DFResult};
 use datafusion::execution::FunctionRegistry;
@@ -669,6 +670,14 @@ impl Registry {
         }
     }
 
+    pub async fn add_python_udf(&mut self, udf: &PythonUdfConfig) -> anyhow::Result<()> {
+        let udf = PythonUDF::parse(&*udf.definition).await?;
+
+        self.udfs.insert((*udf.name).clone(), Arc::new(udf.into()));
+
+        Ok(())
+    }
+
     pub fn get_dylib(&self, path: &str) -> Option<Arc<UdfDylib>> {
         self.dylibs.lock().unwrap().get(path).cloned()
     }
@@ -712,6 +721,11 @@ impl FunctionRegistry for Registry {
         &mut self,
         _: Arc<dyn FunctionRewrite + Send + Sync>,
     ) -> DFResult<()> {
+        // no-op
+        Ok(())
+    }
+
+    fn register_expr_planner(&mut self, _expr_planner: Arc<dyn ExprPlanner>) -> DFResult<()> {
         // no-op
         Ok(())
     }
